@@ -6,6 +6,7 @@ from typing import List
 import bisect
 import math
 
+
 INTERNAL_DISPLAY = "eDP1"
 scale = 1.5
 
@@ -88,7 +89,8 @@ def calculate_new_pos_in_dim(displays: List[Display], dim: int):
         if this_pos>0:
             prev_name = end_order[this_pos-1]
             scale(prev_name)
-            d_from_prev = disp.pos[dim] - end_pos[this_pos-1]
+            #d_from_prev = disp.pos[dim] - end_pos[this_pos-1]
+            d_from_prev = 0
             new_end_of_prev = disp_by_name[prev_name].pos[dim] + disp_by_name[prev_name].res[dim] * get_scale(prev_name)
 
             disp.pos[dim] = int(math.ceil(new_end_of_prev + d_from_prev))
@@ -111,15 +113,60 @@ def create_command(displays: List[Display]) -> str:
         res += f"--output {d.name} --scale {scale}x{scale} --pos {d.pos[0]}x{d.pos[1]} "
     return res
 
-displays = find_enabled_displays()
-if all([d.scaled for d in displays]):
-    print("All displays scaled. Nothing to do.")
-else:
-    calculate_new_pos(displays)
-    cmd = create_command(displays)
-    run(cmd)
-    subprocess.run("killall plasmashell", shell=True)
-    subprocess.run("kstart5 plasmashell", shell=True)
-    subprocess.run("qdbus org.kde.KWin /Compositor suspend")
+def rescale_all():
+    displays = find_enabled_displays()
+    if all([d.scaled for d in displays]):
+        print("All displays scaled. Nothing to do.")
+    else:
+        calculate_new_pos(displays)
+        cmd = create_command(displays)
+        run(cmd)
+        subprocess.run("killall plasmashell", shell=True)
+        subprocess.run("kstart5 plasmashell", shell=True)
+        subprocess.run("qdbus org.kde.KWin /Compositor suspend", shell=True)
+
+rescale_all()
 
 
+# import os
+def watch():
+    import xcffib
+    import xcffib.xproto
+
+    import xcffib.randr as RandR
+    from xcffib.randr import NotifyMask, ScreenChangeNotifyEvent
+    import time
+
+    conn = xcffib.connect()
+    setup = conn.get_setup()
+    # setup.roots holds a list of screens (just one in our case) #
+    root = setup.roots[0]
+
+    randr = conn(RandR.key)
+    randr.SelectInput(root.root, NotifyMask.ScreenChange)
+    # may as well flush()
+    conn.flush()
+
+    currentTimestamp = 0
+
+    while True:
+        try:
+            event = conn.wait_for_event()
+            connected = True
+        except xcffib.ProtocolException as error:
+            print("Protocol error %s received!" % error.__class__.__name__)
+            break
+        except Exception as error:
+            print("Unexpected error received: %s" % error.message)
+            break
+
+        # Once the ScreenChangeNotify Event arrives, filter down to the one we care about. #
+        if isinstance(event, ScreenChangeNotifyEvent):
+            # 3 consecutive events arrive with the same timestamp, #
+            if currentTimestamp != event.config_timestamp:
+                # so mask off the next two and #
+                currentTimestamp = event.config_timestamp
+                
+                time.sleep(1)
+                rescale_all()
+watch()
