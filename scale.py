@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from typing import List
 import bisect
 import math
+import sys
 
 
 INTERNAL_DISPLAY = "eDP1"
@@ -128,7 +129,6 @@ def rescale_all():
 rescale_all()
 
 
-# import os
 def watch():
     import xcffib
     import xcffib.xproto
@@ -169,4 +169,11 @@ def watch():
                 
                 time.sleep(1)
                 rescale_all()
-watch()
+
+def start_daemon():
+    import daemon
+    with daemon.DaemonContext():
+        watch()
+
+if len(sys.argv)==2 and sys.argv[1]=="start":
+    start_daemon()
